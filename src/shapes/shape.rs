@@ -21,34 +21,36 @@ pub trait Unit:
     + SafeZeros
 {
     const ONE: Self;
+    const ZERO: Self;
 }
 
 macro_rules! unit {
-    ($type:ty, $one:expr) => {
+    ($type:ty, $one:expr, $zero:expr) => {
         impl SafeZeros for $type {}
         impl Unit for $type {
             const ONE: Self = $one;
+            const ZERO: Self = $zero;
         }
     };
 }
 
-unit!(f32, 1.0);
-unit!(f64, 1.0);
-unit!(usize, 1);
-unit!(isize, 1);
-unit!(u8, 1);
-unit!(i8, 1);
-unit!(u16, 1);
-unit!(i16, 1);
-unit!(u32, 1);
-unit!(i32, 1);
-unit!(u64, 1);
-unit!(i64, 1);
-unit!(u128, 1);
-unit!(i128, 1);
-unit!(bool, true);
+unit!(f32, 1.0, 0.0);
+unit!(f64, 1.0, 0.0);
+unit!(usize, 1, 0);
+unit!(isize, 1, 0);
+unit!(u8, 1, 0);
+unit!(i8, 1, 0);
+unit!(u16, 1, 0);
+unit!(i16, 1, 0);
+unit!(u32, 1, 0);
+unit!(i32, 1, 0);
+unit!(u64, 1, 0);
+unit!(i64, 1, 0);
+unit!(u128, 1, 0);
+unit!(i128, 1, 0);
+unit!(bool, true, false);
 #[cfg(feature = "f16")]
-unit!(half::f16, half::f16::ONE);
+unit!(half::f16, half::f16::ONE, half::f16::ZERO);
 
 /// Represents something that has a [Unit].
 pub trait HasUnitType {

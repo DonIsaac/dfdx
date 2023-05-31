@@ -1,8 +1,10 @@
+use core::any::TypeId;
 use core::marker::PhantomData;
+use core::mem::size_of;
 use core::ops::Deref;
-use core::{any::TypeId};
-use wgpu::{self, util::DeviceExt, Buffer, Device};
+use core::slice;
 use std::sync::Arc;
+use wgpu::{self, util::DeviceExt, Buffer, Device};
 
 #[derive(Debug)]
 pub struct WgpuVec<E> {
@@ -33,14 +35,27 @@ impl<E: 'static> WgpuVec<E> {
         }
     }
 
-    // pub(crate) fn map(&self) {
-    //     if !self.is_mapped {
-    //         self.buf
-    //             .slice(..)
-    //             .map_async(wgpu::MapMode::Read, |res| res.unwrap());
-    //         self.is_mapped = true;
-    //     }
-    // }
+    pub fn from_vec(dev: Arc<Device>, vec: &Vec<E>) -> Self {
+        let raw_bytes = unsafe {
+            let (prefix, data, suffix) = vec.as_slice().align_to::<u8>();
+            assert_eq!(prefix.len(), 0);
+            assert_eq!(suffix.len(), 0);
+            data
+        };
+        let buf = dev.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: raw_bytes,
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+        return Self {
+            dev,
+            buf,
+            ty: TypeId::of::<E>(),
+            is_mapped: false,
+            pty: Default::default(),
+        };
+    }
+
     pub(crate) fn map(&mut self) {
         if !self.is_mapped {
             self.buf
@@ -49,17 +64,20 @@ impl<E: 'static> WgpuVec<E> {
             self.is_mapped = true;
         }
     }
-    pub(crate) fn unmap(&self) {
-        self.buf.unmap()
+    /// Flushes any pending write operations and unmaps the buffer from host
+    /// memory. Or, more simply, moves the buffer to the GPU.
+    pub(crate) fn unmap(&mut self) {
+        self.buf.unmap();
+        self.is_mapped = false;
     }
 
     /// Returns the number of elements in the vec.
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.buf.size() as usize / std::mem::size_of::<E>()
     }
 
     /// Returns the number of bytes used by the vec's elements.
-    /// 
+    ///
     /// This is different than the size of the vec itself. This function doesn't
     /// account for overhead from the WgpuVec struct itself.
     pub(crate) fn size(&self) -> usize {
@@ -73,7 +91,7 @@ impl<E: 'static> WgpuVec<E> {
         self.buf.slice(..).get_mapped_range_mut()
     }
 
-    /* 
+    /*
     /// Panics if the buffer isn't mapped
     pub(crate) fn as_slice<'s>(&'s self) -> &'s [E] {
         let slice: wgpu::BufferSlice<'s> = self.buf.slice(..);
@@ -161,5 +179,106 @@ impl<E: Clone> Into<Vec<E>> for WgpuVec<E> {
 
         let vec: Vec<E> = data.to_vec(); // copy is here
         vec
+    }
+}
+
+impl<E: 'static + Copy> WgpuVec<E> {
+    /// Copies the contents of the given slice into the buffer.
+    ///
+    /// # Panics
+    /// 1. If the buffer is not mapped
+    /// 2. If the length of the given slice does not match the length of the buffer
+    /// 3. If alignment is incorrect (should never happen)
+    pub fn copy_into(&mut self, data: &[E]) {
+        assert_eq!(self.len(), data.len());
+        debug_assert_eq!(
+            self.ty,
+            TypeId::of::<E>(),
+            "WgpuBuffer::copy_into(): type mismatch between buffer's contents and expected type"
+        );
+        let mut view = self.view_mut();
+        unsafe {
+            let (prefix, raw, suffix) = data.align_to::<u8>();
+            assert_eq!(prefix.len(), 0);
+            assert_eq!(suffix.len(), 0);
+            view.copy_from_slice(raw);
+        }
+    }
+
+    pub fn copy_fill(&mut self, data: E) {
+        if self.len() == 0 {
+            return;
+        }
+        debug_assert!(self.len() % size_of::<E>() == 0);
+        debug_assert_eq!(
+            self.ty,
+            TypeId::of::<E>(),
+            "WgpuBuffer::copy_fill(): type mismatch between buffer's contents and expected type"
+        );
+
+        let slice = slice::from_ref(&data);
+        let mut view = self.view_mut();
+
+        unsafe {
+            let (p, raw, s) = slice.align_to::<u8>();
+            assert_eq!(p.len(), 0);
+            assert_eq!(s.len(), 0);
+            // view.as_chunks_mut::<size_of::<E>()>();
+            for chunk in view.chunks_exact_mut(size_of::<E>()) {
+                chunk.copy_from_slice(raw);
+            }
+            // self.view_mut().
+        }
+        todo!()
+    }
+}
+
+impl<E: 'static + Clone> WgpuVec<E> {
+    /// Clones the contents of the given slice into the buffer.
+    ///
+    /// # Panics
+    /// 1. If the buffer is not mapped
+    /// 2. If the length of the given slice does not match the length of the buffer
+    /// 3. If alignment is incorrect (should never happen)
+    pub fn clone_into(&mut self, data: &[E]) {
+        assert_eq!(self.len(), data.len());
+        debug_assert_eq!(
+            self.ty,
+            TypeId::of::<E>(),
+            "WgpuBuffer:clone_into(): type mismatch between buffer's contents and expected type"
+        );
+        let mut view = self.view_mut();
+        unsafe {
+            let (prefix, raw, suffix) = data.align_to::<u8>();
+            assert_eq!(prefix.len(), 0);
+            assert_eq!(suffix.len(), 0);
+            view.copy_from_slice(raw);
+        }
+    }
+
+    pub fn clone_fill(&mut self, data: &[E]) {
+        if self.len() == 0 {
+            return;
+        }
+        debug_assert!(self.len() % size_of::<E>() == 0);
+        debug_assert_eq!(
+            self.ty,
+            TypeId::of::<E>(),
+            "WgpuBuffer:clone_fill(): type mismatch between buffer's contents and expected type"
+        );
+
+        let mut view = self.view_mut();
+
+        unsafe {
+            let (p, raw, s) = data.align_to::<u8>();
+            assert_eq!(p.len(), 0);
+            assert_eq!(s.len(), 0);
+            // view.as_chunks_mut::<size_of::<E>()>();
+            for chunk in view.chunks_exact_mut(size_of::<E>()) {
+                chunk.copy_from_slice(raw);
+            }
+            // self.view_mut().
+        }
+        todo!()
     }
 }
