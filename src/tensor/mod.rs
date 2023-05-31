@@ -140,6 +140,8 @@ pub(crate) mod cache;
 pub(crate) mod cpu;
 #[cfg(feature = "cuda")]
 pub(crate) mod cuda;
+#[cfg(feature = "wgpu")]
+pub(crate) mod wgpu;
 mod ghost;
 mod gradients;
 mod masks;

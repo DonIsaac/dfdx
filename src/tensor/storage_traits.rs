@@ -34,7 +34,7 @@ pub trait Storage<E>: 'static + std::fmt::Debug + Default + Clone + HasErr {
     fn try_alloc_len(&self, len: usize) -> Result<Self::Vec, Self::Err>;
 
     fn tensor_to_vec<S: Shape, T>(&self, tensor: &Tensor<S, E, Self, T>) -> Vec<E>;
-
+    /// Get the number of elements in `v`.
     fn len(&self, v: &Self::Vec) -> usize;
 }
 
