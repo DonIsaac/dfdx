@@ -29,7 +29,7 @@ impl Wgpu {
 
     /// Creates a new, unmapped vector of the given length.
     pub(crate) fn create_vec<E: 'static>(&self, len: usize) -> WgpuVec<E> {
-        WgpuVec::new(self.dev.clone(), len, false)
+        WgpuVec::storage(self.dev.clone(), len, false)
     }
 }
 
@@ -39,7 +39,7 @@ impl<E: Unit> ZerosTensor<E> for Wgpu {
         let strides = shape.strides();
         // let v = vec![E::ZERO; shape.num_elements()];
         // let gpu_vec: WgpuVec<E> = WgpuVec::from_vec(self.dev.clone(), &v);
-        let mut vec: WgpuVec<E> = WgpuVec::new(self.dev.clone(), shape.num_elements(), true);
+        let mut vec: WgpuVec<E> = WgpuVec::storage(self.dev.clone(), shape.num_elements(), true);
         vec.copy_fill(E::ZERO);
         vec.unmap();
         Ok(self.build_tensor(shape, strides, vec))
@@ -59,7 +59,7 @@ impl <E: Unit> OnesTensor<E> for Wgpu {
         let strides = shape.strides();
         // let v = vec![E::ZERO; shape.num_elements()];
         // let gpu_vec: WgpuVec<E> = WgpuVec::from_vec(self.dev.clone(), &v);
-        let mut vec: WgpuVec<E> = WgpuVec::new(self.dev.clone(), shape.num_elements(), true);
+        let mut vec: WgpuVec<E> = WgpuVec::storage(self.dev.clone(), shape.num_elements(), true);
         vec.copy_fill(E::ONE);
         vec.unmap();
         Ok(self.build_tensor(shape, strides, vec))

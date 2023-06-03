@@ -258,7 +258,7 @@ impl<E: Unit> Storage<E> for Wgpu {
     type Vec = WgpuVec<E>;
 
     fn try_alloc_len(&self, len: usize) -> Result<Self::Vec, Self::Err> {
-        let v = Self::Vec::new(self.dev.clone(), len, false);
+        let v = Self::Vec::storage(self.dev.clone(), len, false);
         Ok(v)
         // let buf = self.dev.create_buffer(&wgpu::BufferDescriptor {
         //     label: None,

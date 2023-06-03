@@ -9,21 +9,27 @@ use wgpu::{self, util::DeviceExt, Buffer, Device};
 #[derive(Debug)]
 pub struct WgpuVec<E> {
     pub(crate) dev: Arc<Device>,
-    pub(crate) buf: Buffer,
     pub(crate) ty: TypeId,
+    pub(crate) buf: Buffer,
     pub(crate) is_mapped: bool,
     pty: PhantomData<E>,
 }
-
-unsafe impl<T: Send> Send for WgpuVec<T> {}
-unsafe impl<T: Sync> Sync for WgpuVec<T> {}
+static_assertions::assert_impl_all!(WgpuVec<u8>: Send, Sync);
 
 impl<E: 'static> WgpuVec<E> {
-    pub(crate) fn new(dev: Arc<Device>, len: usize, mapped_at_creation: bool) -> Self {
+    /// Internal constructor with full control over the buffer. Overloaded by
+    /// other, public constructors.
+    pub(crate) fn new(
+        dev: Arc<Device>,
+        label: wgpu::Label,
+        len: usize,
+        usage: wgpu::BufferUsages,
+        mapped_at_creation: bool
+    ) -> Self {
         let buf = dev.create_buffer(&wgpu::BufferDescriptor {
-            label: None, // todo
+            label,
             size: (std::mem::size_of::<E>() * len) as u64,
-            usage: wgpu::BufferUsages::STORAGE,
+            usage,
             mapped_at_creation,
         });
         Self {
@@ -35,12 +41,36 @@ impl<E: 'static> WgpuVec<E> {
         }
     }
 
+    pub(crate) fn storage(dev: Arc<Device>, len: usize, mapped_at_creation: bool) -> Self {
+        Self::new(
+            dev,
+            None,
+            len,
+            wgpu::BufferUsages::STORAGE,
+            mapped_at_creation,
+        )
+    }
+
+    pub(crate) fn uniform(dev: Arc<Device>, len: usize, mapped_at_creation: bool) -> Self {
+        Self::new(
+            dev,
+            None,
+            len,
+            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation
+        )
+    }
+
     pub fn from_vec(dev: Arc<Device>, vec: &Vec<E>) -> Self {
-        let raw_bytes = unsafe {
-            let (prefix, data, suffix) = vec.as_slice().align_to::<u8>();
-            assert_eq!(prefix.len(), 0);
-            assert_eq!(suffix.len(), 0);
-            data
+        let raw_bytes: &[u8] = if vec.len() == 0 {
+            &[]
+        } else {
+            unsafe {
+                let (prefix, data, suffix) = vec.as_slice().align_to::<u8>();
+                assert_eq!(prefix.len(), 0);
+                assert_eq!(suffix.len(), 0);
+                data
+            }
         };
         let buf = dev.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
@@ -87,6 +117,7 @@ impl<E: 'static> WgpuVec<E> {
     pub(crate) fn view(&self) -> wgpu::BufferView {
         self.buf.slice(..).get_mapped_range()
     }
+
     pub(crate) fn view_mut(&self) -> wgpu::BufferViewMut {
         self.buf.slice(..).get_mapped_range_mut()
     }
@@ -235,7 +266,6 @@ impl<E: 'static + Copy> WgpuVec<E> {
             }
             // self.view_mut().
         }
-        todo!()
     }
 }
 
