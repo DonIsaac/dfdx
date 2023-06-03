@@ -121,8 +121,8 @@ impl<E: 'static> WgpuVec<E> {
     */
 }
 
-impl<E> Into<&wgpu::Buffer> for &WgpuVec<E> {
-    fn into(self) -> &'static wgpu::Buffer {
+impl<'a, E> Into<&'a wgpu::Buffer> for &'a WgpuVec<E> {
+    fn into(self) -> &'a wgpu::Buffer {
         &self.buf
     }
 }

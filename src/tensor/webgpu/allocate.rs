@@ -28,7 +28,7 @@ impl Wgpu {
     }
 
     /// Creates a new, unmapped vector of the given length.
-    pub(crate) fn create_vec<E>(&self, len: usize) -> WgpuVec<E> {
+    pub(crate) fn create_vec<E: 'static>(&self, len: usize) -> WgpuVec<E> {
         WgpuVec::new(self.dev.clone(), len, false)
     }
 }

@@ -55,7 +55,7 @@ pub struct Wgpu {
     pub(crate) queue: Arc<wgpu::Queue>,
     pub(crate) shaders: SafeBTreeMap<&'static str, wgpu::ShaderModule>,
     pub(crate) layouts: SafeBTreeMap<&'static str, Arc<wgpu::BindGroupLayout>>,
-    pub(crate) pipelines: SafeBTreeMap<PipelineKey, wgpu::ComputePipeline>, // pipeline_cache: Arc<RwLock<
+    pub(crate) pipelines: SafeBTreeMap<PipelineKey, Arc<wgpu::ComputePipeline>>, // pipeline_cache: Arc<RwLock<
     empty_uniform: Arc<wgpu::Buffer>,
 }
 
@@ -77,10 +77,10 @@ impl Default for Wgpu {
 
 impl Wgpu {
     pub fn new(instance: wgpu::Instance, dev: wgpu::Device, queue: wgpu::Queue) -> Self {
-        let preexisting_layouts = &[
-            (UNARY_OP_LAYOUT_NAME, dev.create_bind_group_layout(&unary_op_layout())),
-            (BINARY_OP_LAYOUT_NAME, dev.create_bind_group_layout(&binary_op_layout())),
-        ];
+        // let preexisting_layouts = &[
+        //     (UNARY_OP_LAYOUT_NAME, dev.create_bind_group_layout(&unary_op_layout())),
+        //     (BINARY_OP_LAYOUT_NAME, dev.create_bind_group_layout(&binary_op_layout())),
+        // ];
         let empty_uniform = dev.create_buffer(&wgpu::BufferDescriptor {
             label: Some("empty_uniform"),
             size: 0,
@@ -96,10 +96,19 @@ impl Wgpu {
             pipelines: Default::default(),
             empty_uniform: Arc::new(empty_uniform)
         };
-        let mut layouts = instance.layouts.write().unwrap();
-        for (name, layout) in preexisting_layouts {
-            layouts.insert(name, Arc::new(*layout));
+
+        {
+            let mut layouts = instance.layouts.write().unwrap();
+            layouts.insert(
+                UNARY_OP_LAYOUT_NAME,
+                Arc::new(instance.dev.create_bind_group_layout(&unary_op_layout())),
+            );
+            layouts.insert(
+                BINARY_OP_LAYOUT_NAME,
+                Arc::new(instance.dev.create_bind_group_layout(&binary_op_layout())),
+            );
         }
+
         return instance
     }
 
@@ -110,7 +119,7 @@ impl Wgpu {
 
     /// Loads a shader module from source code. This is a blocking operation.
     pub(crate) fn load_module(
-        &mut self,
+        &self,
         shader_name: &'static str,
         source_code: &'static str,
     ) {
@@ -129,8 +138,8 @@ impl Wgpu {
     ) -> Arc<wgpu::BindGroupLayout> {
         let layouts = self.layouts.read().unwrap();
         match layout_type {
-            OpLayoutType::Unary => *layouts.get(UNARY_OP_LAYOUT_NAME).unwrap(),
-            OpLayoutType::Binary => *layouts.get(BINARY_OP_LAYOUT_NAME).unwrap(),
+            OpLayoutType::Unary => layouts.get(UNARY_OP_LAYOUT_NAME).unwrap().clone(),
+            OpLayoutType::Binary => layouts.get(BINARY_OP_LAYOUT_NAME).unwrap().clone(),
         }
     }
 
@@ -151,20 +160,22 @@ impl Wgpu {
         &self,
         shader_name: &'static str,
         function_name: &'static str,
-    ) -> Option<&wgpu::ComputePipeline> {
+    ) -> Option<Arc<wgpu::ComputePipeline>> {
         self.pipelines
             .read()
             .unwrap()
             .get(&(shader_name, function_name).into())
+            .map(|p| p.clone())
     }
 
     pub(crate) fn load_pipeline(
-        &mut self,
+        &self,
         shader_name: &'static str,
         function_name: &'static str,
         layout: &wgpu::BindGroupLayout,
     ) {
-        let module = self.shaders.read().unwrap().get(shader_name).unwrap();
+        let shaders = self.shaders.read().unwrap();
+        let module = shaders.get(shader_name).unwrap();
         let pipeline_layout = self
             .dev
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -183,7 +194,7 @@ impl Wgpu {
         self.pipelines
             .write()
             .unwrap()
-            .insert((shader_name, function_name).into(), pipeline);
+            .insert((shader_name, function_name).into(), Arc::new(pipeline));
     }
 
     pub(crate) fn execute_op(
