@@ -148,6 +148,12 @@ impl<'a, E> Into<&'a wgpu::Buffer> for &'a WgpuVec<E> {
     }
 }
 
+impl<E> Into<wgpu::Buffer> for WgpuVec<E> {
+    fn into(self) -> wgpu::Buffer {
+        self.buf
+    }
+}
+
 // impl <E : Clone + 'static> WgpuVec<E> {
 //     pub(crate) fn as_vec(&self) -> Vec<E> {
 //         self.as_slice().to_vec()
