@@ -57,7 +57,7 @@ impl<E: 'static> WgpuVec<E> {
             dev,
             None,
             len,
-            wgpu::BufferUsages::STORAGE,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation,
         )
     }
@@ -86,7 +86,7 @@ impl<E: 'static> WgpuVec<E> {
         let buf = dev.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: raw_bytes,
-            usage: wgpu::BufferUsages::STORAGE,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
         });
         return Self {
             dev,
@@ -102,6 +102,15 @@ impl<E: 'static> WgpuVec<E> {
             self.buf
                 .slice(..)
                 .map_async(wgpu::MapMode::Write, |res| res.unwrap());
+            self.is_mapped = true;
+        }
+    }
+
+    pub(crate) fn map_async(&mut self, mode: wgpu::MapMode) {
+        if !self.is_mapped {
+            self.buf
+                .slice(..)
+                .map_async(mode, |res| res.unwrap());
             self.is_mapped = true;
         }
     }

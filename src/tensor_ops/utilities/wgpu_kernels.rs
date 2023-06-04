@@ -188,7 +188,7 @@ pub trait BinaryOpCudaKernel<E> {
 
 macro_rules! wgpu_binary {
     ($Op:path, $TypeName:ty, $Wgsl:tt, $Fwd:tt, $Bwd_Lhs:tt, $Bwd_Rhs:tt) => {
-        impl crate::tensor_ops::cuda_kernels::BinaryOpCudaKernel<$TypeName> for $Op {
+        impl crate::tensor_ops::wgpu_kernels::BinaryOpCudaKernel<$TypeName> for $Op {
             const HAS_CONST_DF: bool = false;
             const WGSL_SRC: &'static str = $Wgsl;
             const MODULE_NAME: &'static str = $Fwd;
@@ -198,7 +198,7 @@ macro_rules! wgpu_binary {
         }
     };
     (const_df() $Op:path, $TypeName:ty, $Wgsl:tt, $Fwd:tt, $Bwd_Lhs:tt, $Bwd_Rhs:tt) => {
-        impl crate::tensor_ops::cuda_kernels::BinaryOpCudaKernel<$TypeName> for $Op {
+        impl crate::tensor_ops::wgpu_kernels::BinaryOpCudaKernel<$TypeName> for $Op {
             const HAS_CONST_DF: bool = true;
             const WGSL_SRC: &'static str = $Wgsl;
             const MODULE_NAME: &'static str = $Fwd;
@@ -214,13 +214,13 @@ pub(crate) use wgpu_binary;
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
 struct BinaryKernelMeta<S: Shape> {
-    numel: usize,
-    num_dims: usize,
+    numel: u32,
+    num_dims: u32,
     /// contains lhs_shape, lhs_strides, rhs_strides in that order.
     /// This must be the last field in the struct
     info: [S::Concrete; 3],
 }
-// kernel info will be stored in a uniform buffer and so must be 8 byte aligned
+// kernel info will be stored in a uniform buffer and so must be 16 byte aligned
 static_assertions::const_assert!(core::mem::align_of::<BinaryKernelMeta<[usize; 2]>>() == 8);
 impl<S: Shape> BinaryKernelMeta<S> {
     const CONCRETE_SIZE: usize = core::mem::size_of::<S::Concrete>();
@@ -229,15 +229,15 @@ impl<S: Shape> BinaryKernelMeta<S> {
         let numel = shape.num_elements();
 
         Self {
-            numel,
-            num_dims: S::NUM_DIMS,
+            numel: numel as u32,
+            num_dims: S::NUM_DIMS as u32,
             info: [shape.concrete(), lhs.strides, rhs.strides],
         }
     }
     fn to_bytes(&self) -> Vec<u8> {
         let capacity =
             // numel, num_dims
-            (mem::size_of::<usize>() * 2) +
+            (mem::size_of::<u32>() * 2) +
             // info
             (Self::CONCRETE_SIZE * 3);
         debug_assert!(
@@ -271,7 +271,7 @@ impl<E: Dtype, K: BinaryOpCudaKernel<E> + Clone> BinaryKernel<K, E> for Wgpu {
                 Some(pipeline) => pipeline,
                 None => {
                     if !self.has_module(K::MODULE_NAME) {
-                        self.load_module(K::WGSL_SRC, K::MODULE_NAME);
+                        self.load_module(K::MODULE_NAME, K::WGSL_SRC);
                     }
                     self.load_pipeline(K::MODULE_NAME, K::FWD_FN_NAME, layout.as_ref());
                     self.get_pipeline(K::MODULE_NAME, K::FWD_FN_NAME).unwrap()
@@ -294,12 +294,13 @@ impl<E: Dtype, K: BinaryOpCudaKernel<E> + Clone> BinaryKernel<K, E> for Wgpu {
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("binary kernel meta"),
                 contents: &meta.to_bytes(),
-                usage: wgpu::BufferUsages::UNIFORM,
+                usage: wgpu::BufferUsages::STORAGE,
             });
 
         match (lhs, rhs) {
             (Cow::Borrowed(lhs), Cow::Borrowed(rhs)) => {
-                let output: WgpuVec<E> = self.create_vec(meta.numel);
+                let output: WgpuVec<E> = self.create_vec(meta.numel as usize);
+                // let output = WgpuVec::new(self.dev.clone(), Some("output"), meta.numel as usize, wgpu::BufferUsages::STORAGE)
                 let params: wgpu::BindGroup = {
                     let binding_entries = to_entries([
                         lhs.data.as_entire_binding(),
@@ -327,7 +328,7 @@ impl<E: Dtype, K: BinaryOpCudaKernel<E> + Clone> BinaryKernel<K, E> for Wgpu {
                 Ok(self.build_tensor(shape, strides, output))
             }
             (Cow::Owned(mut lhs), Cow::Owned(mut rhs)) => {
-                let output = self.create_vec::<E>(meta.numel);
+                let output = self.create_vec::<E>(meta.numel as usize);
                 let lhs_valid = lhs.strides == lhs.shape.strides();
                 let rhs_valid = rhs.strides == rhs.shape.strides();
                 if lhs_valid || rhs_valid {
@@ -387,7 +388,7 @@ impl<E: Dtype, K: BinaryOpCudaKernel<E> + Clone> BinaryKernel<K, E> for Wgpu {
                         Ok(self.build_tensor(shape, strides, output))
                     }
                 } else {
-                    let output = self.create_vec::<E>(meta.numel);
+                    let output = self.create_vec::<E>(meta.numel as usize);
                     let params: wgpu::BindGroup = {
                         let binding_entries = to_entries([
                             lhs.data.as_entire_binding(),

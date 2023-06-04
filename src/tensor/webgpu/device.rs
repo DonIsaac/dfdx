@@ -59,11 +59,22 @@ pub struct Wgpu {
 impl Default for Wgpu {
     fn default() -> Self {
         let instance: wgpu::Instance = Default::default();
+        let limits: wgpu::Limits = Default::default();
+        let mut features: wgpu::Features = Default::default();
+        features = features | wgpu::Features::MAPPABLE_PRIMARY_BUFFERS; // not a good idea
         let device_future = async {
             // todo: request high-powered device
             let adapter = instance.request_adapter(&Default::default()).await.unwrap();
             adapter
-                .request_device(&Default::default(), None)
+                // .request_device(&Default::default(), None)
+                .request_device(
+                    &wgpu::DeviceDescriptor {
+                        label: None,
+                        limits,
+                        features,
+                    },
+                    None,
+                )
                 .await
                 .unwrap()
         };
@@ -208,13 +219,15 @@ impl Wgpu {
         return submission_index;
     }
 
-    pub(crate) fn submit_commands<F>(
-        &self,
-        command_builder: F
-    ) -> wgpu::SubmissionIndex where  F: FnOnce(&mut wgpu::CommandEncoder) {
+    pub(crate) fn submit_commands<F>(&self, command_builder: F) -> wgpu::SubmissionIndex
+    where
+        F: FnOnce(&mut wgpu::CommandEncoder),
+    {
         let mut encoder = self
             .dev
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("submit_commands") });
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("submit_commands"),
+            });
         command_builder(&mut encoder);
         let cmd = [encoder.finish()];
         return self.queue.submit(cmd);
@@ -297,7 +310,41 @@ impl<E: Unit> Storage<E> for Wgpu {
             tensor.data.ty,
             "WgpuBuffer::as_slice(): type mismatch between buffer's contents and expected type"
         );
-        let view = tensor.data.view();
+        // tensor.data.map()
+        // tensor.data.map_async();
+        let tmp: WgpuVec<E> = WgpuVec::new(
+            self.dev.clone(),
+            Some("to_vec tmp"),
+            tensor.shape.num_elements(),
+            wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            false
+        );
+        let tmp: wgpu::Buffer = tmp.into();
+        let copy_id = self.submit_commands(|encoder| {
+            encoder.copy_buffer_to_buffer(
+                &tensor.data.buf,
+                0 as wgpu::BufferAddress,
+                &tmp,
+                0,
+                tensor.data.size() as wgpu::BufferAddress
+            );
+            // pass.b
+        });
+        // tmp.map_async(wgpu::MapMode::Read, |res| res.unwrap());
+        tmp.slice(..).map_async(wgpu::MapMode::Read, |res| res.unwrap());
+        self.dev.poll(wgpu::Maintain::WaitForSubmissionIndex(copy_id));
+        // tensor
+        //     .data
+        //     .buf
+        //     .slice(..)
+        //     .map_async(wgpu::MapMode::Read, |res| {
+        //         match res {
+        //             Ok(_) => {},
+        //             Err(e) => panic!("failed to map buffer: {:?}", e),
+        //         }
+        //     });
+        // self.instance.poll_all(true);
+        let view = tmp.slice(..).get_mapped_range();
         let slice = unsafe {
             let (prefix, slice, suffix) = view.align_to::<E>();
             assert_eq!(prefix.len(), 0);

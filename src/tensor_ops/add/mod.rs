@@ -3,6 +3,9 @@ mod cpu_kernel;
 #[cfg(feature = "cuda")]
 mod cuda_kernel;
 
+#[cfg(feature = "wgpu")]
+mod wgpu_kernel;
+
 use super::ops::*;
 use crate::{
     shapes::*,
@@ -100,6 +103,10 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{shapes::*, tensor::*, tensor_ops::*, tests::*};
+    #[cfg(feature = "wgpu")]
+    type BetaTestDevice = Wgpu;
+    #[cfg(not(feature = "wgpu"))]
+    type BetaTestDevice = TestDevice;
 
     #[test]
     fn test_add_0d() {

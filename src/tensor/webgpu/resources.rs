@@ -20,7 +20,8 @@ pub(crate) const fn unary_op_layout() -> wgpu::BindGroupLayoutDescriptor<'static
         // input tensor buffer
         storage_entry(0, true),
         // metadata buffer
-        uniform_entry(1),
+        // uniform_entry(1),
+        storage_entry(1, true),
         // output tensor buffer
         storage_entry(2, false)
     ];
@@ -37,7 +38,8 @@ pub(crate) const fn binary_op_layout() -> wgpu::BindGroupLayoutDescriptor<'stati
         // rhs tensor buffer
         storage_entry(1, true),
         // metadata buffer
-        uniform_entry(2),
+        // uniform_entry(2),
+        storage_entry(2, true),
         // output tensor buffer
         storage_entry(3, false)
     ];

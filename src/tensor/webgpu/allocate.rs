@@ -33,6 +33,18 @@ impl Wgpu {
     }
 }
 
+impl<E: Unit> TensorFromVec<E> for Wgpu {
+    fn try_tensor_from_vec<S: Shape>(
+        &self,
+        src: Vec<E>,
+        shape: S,
+    ) -> Result<Tensor<S, E, Self>, Self::Err> {
+        let strides = shape.strides();
+        let vec = WgpuVec::from_vec(self.dev.clone(), &src);
+        Ok(self.build_tensor(shape, strides, vec))
+    }
+}
+
 impl<E: Unit> ZerosTensor<E> for Wgpu {
     fn try_zeros_like<S: HasShape>(&self, src: &S) -> Result<Tensor<S::Shape, E, Self>, Self::Err> {
         let shape = *src.shape();
