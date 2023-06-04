@@ -14,10 +14,7 @@ use wgpu;
 // use std::future::Future;
 use futures::executor;
 
-use super::{
-    resources::*,
-    vec::*
-};
+use super::{resources::*, vec::*};
 
 type SafeBTreeMap<K, V> = Arc<RwLock<BTreeMap<K, V>>>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -94,7 +91,7 @@ impl Wgpu {
             shaders: Default::default(),
             layouts: Default::default(),
             pipelines: Default::default(),
-            empty_uniform: Arc::new(empty_uniform)
+            empty_uniform: Arc::new(empty_uniform),
         };
 
         {
@@ -109,7 +106,7 @@ impl Wgpu {
             );
         }
 
-        return instance
+        return instance;
     }
 
     /// Checks if a shader module as already been loaded.
@@ -118,11 +115,7 @@ impl Wgpu {
     }
 
     /// Loads a shader module from source code. This is a blocking operation.
-    pub(crate) fn load_module(
-        &self,
-        shader_name: &'static str,
-        source_code: &'static str,
-    ) {
+    pub(crate) fn load_module(&self, shader_name: &'static str, source_code: &'static str) {
         let source = wgpu::ShaderSource::Wgsl(source_code.into());
         let shader = self.dev.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(shader_name),
@@ -132,17 +125,13 @@ impl Wgpu {
         debug_assert!(existing.is_none(), "Tried to load existing shader module");
     }
 
-    pub(crate) fn get_layout(
-        &self,
-        layout_type: OpLayoutType
-    ) -> Arc<wgpu::BindGroupLayout> {
+    pub(crate) fn get_layout(&self, layout_type: OpLayoutType) -> Arc<wgpu::BindGroupLayout> {
         let layouts = self.layouts.read().unwrap();
         match layout_type {
             OpLayoutType::Unary => layouts.get(UNARY_OP_LAYOUT_NAME).unwrap().clone(),
             OpLayoutType::Binary => layouts.get(BINARY_OP_LAYOUT_NAME).unwrap().clone(),
         }
     }
-
 
     /// Checks if a compute pipeline has already been created.
     pub(crate) fn has_pipeline(
@@ -197,7 +186,7 @@ impl Wgpu {
             .insert((shader_name, function_name).into(), Arc::new(pipeline));
     }
 
-    pub(crate) fn execute_op(
+    pub(crate) fn submit_basic_op(
         &self,
         pipeline: &wgpu::ComputePipeline,
         params: &wgpu::BindGroup,
@@ -219,6 +208,33 @@ impl Wgpu {
         return submission_index;
     }
 
+    pub(crate) fn submit_commands<F>(
+        &self,
+        command_builder: F
+    ) -> wgpu::SubmissionIndex where  F: FnOnce(&mut wgpu::CommandEncoder) {
+        let mut encoder = self
+            .dev
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("submit_commands") });
+        command_builder(&mut encoder);
+        let cmd = [encoder.finish()];
+        return self.queue.submit(cmd);
+    }
+
+    // pub(crate) fn submit_commands<F>(
+    //     &self,
+    //     label: wgpu::Label<'static>,
+    //     command_builder: F
+    // ) -> wgpu::SubmissionIndex where for <'a> F: FnOnce(&'a mut wgpu::ComputePass<'a>) {
+    //     let mut encoder = self
+    //         .dev
+    //         .create_command_encoder(&wgpu::CommandEncoderDescriptor { label });
+    //     {
+    //         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label });
+    //         command_builder(&mut pass);
+    //     }
+    //     let cmd = [encoder.finish()];
+    //     return self.queue.submit(cmd);
+    // }
     pub(crate) fn empty_metadata(&self) -> Pin<&wgpu::Buffer> {
         Pin::new(&self.empty_uniform)
     }
