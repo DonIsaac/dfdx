@@ -39,6 +39,9 @@ memmap2 = { version = "0.5", default-features = false, optional = true }
 half = { git = "https://github.com/starkat99/half-rs.git", branch = "main", optional = true, features = ["num-traits", "rand_distr"] }
 gemm = { version = "0.15.3", default-features = false, optional = true }
 rayon = { version = "1.7.0", optional = true }
+wgpu = { version = "0.16.1", optional = true }
+futures = { version = "0.3.28", optional = true, default-features = false, features = ["alloc", "async-await", "executor"] }
+static_assertions = "1.1.0"
 
 [dev-dependencies]
 tempfile = "3.3.0"
@@ -52,13 +55,15 @@ glob = { version = "0.3.1", optional = true }
 default = ["std", "fast-alloc", "cpu"]
 nightly = ["half?/use-intrinsics", "gemm?/nightly"]
 
-std = ["cudarc?/std", "rand_distr/std_math", "gemm?/std"]
+std = ["cudarc?/std", "rand_distr/std_math", "gemm?/std", "futures?/std"]
 fast-alloc = ["std"]
 no-std = ["no-std-compat", "dep:spin", "cudarc?/no-std", "num-traits/libm"]
 
 cpu = ["dep:gemm", "dep:rayon"]
 cuda = ["dep:cudarc", "dep:glob"]
 cudnn = ["cuda", "cudarc?/cudnn"]
+
+wgpu = ["dep:wgpu", "dep:futures"]
 
 f16 = ["dep:half", "cudarc?/f16"]
 

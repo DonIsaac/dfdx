@@ -140,6 +140,10 @@ pub(crate) mod cache;
 pub(crate) mod cpu;
 #[cfg(feature = "cuda")]
 pub(crate) mod cuda;
+
+#[cfg(feature = "wgpu")]
+pub(crate) mod wgpu;
+
 mod ghost;
 mod gradients;
 mod masks;
@@ -158,7 +162,7 @@ pub(crate) use storage_traits::{OneFillStorage, ZeroFillStorage};
 pub(crate) use tensorlike::Tensorlike;
 
 pub use cpu::{Cpu, CpuError};
-#[cfg(not(feature = "cuda"))]
+#[cfg(all(not(feature = "cuda"), not(feature = "wgpu")))]
 pub type AutoDevice = Cpu;
 
 #[cfg(feature = "cuda")]
@@ -167,6 +171,12 @@ pub(crate) use cuda::launch_cfg;
 pub use cuda::{Cuda, CudaError};
 #[cfg(feature = "cuda")]
 pub type AutoDevice = Cuda;
+
+#[cfg(feature = "wgpu")]
+pub use self::wgpu::{Wgpu, WgpuError};
+
+#[cfg(all(not(feature = "cuda"), feature = "wgpu"))]
+pub type AutoDevice = Wgpu;
 
 pub use storage_traits::{AsArray, CopySlice, TensorFrom, TensorFromVec};
 pub use storage_traits::{Cache, HasErr, RandomU64, Storage, Synchronize};
