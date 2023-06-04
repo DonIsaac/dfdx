@@ -48,6 +48,7 @@ impl<E: Unit> ZerosTensor<E> for Wgpu {
 
 impl <E: Unit> ZeroFillStorage<E> for Wgpu {
     fn try_fill_with_zeros(&self, storage: &mut Self::Vec) -> Result<(), Self::Err> {
+        // todo: use clear_buffer when appropriate
         storage.copy_fill(E::ZERO);
         Ok(())
     }

@@ -239,7 +239,8 @@ pub trait Shape:
         + Sync
         + IntoIterator<Item = usize>
         + Into<std::vec::Vec<usize>>
-        + AsRef<[usize]>;
+        + AsRef<[usize]>
+        + bytemuck::Pod;
 
     /// All the axes of this shape
     type AllAxes: Axes;
