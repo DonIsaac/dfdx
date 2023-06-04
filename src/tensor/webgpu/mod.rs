@@ -6,6 +6,8 @@ pub(crate) mod resources;
 
 pub use device::{Wgpu, WgpuError};
 pub(crate) use device::OpLayoutType;
+pub(crate) use vec::WgpuVec;
+pub(crate) use resources::{WorkGroupSize};
 
 #[cfg(all(test, feature = "wgpu"))]
 mod test {

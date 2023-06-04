@@ -9,9 +9,20 @@ use wgpu::{self, util::DeviceExt, Buffer, Device};
 #[derive(Debug)]
 pub struct WgpuVec<E> {
     pub(crate) dev: Arc<Device>,
+    /// The data type of the elements in the buffer. This reflects `E` in
+    /// `WgpuVec<E>`. This info is needed at runtime to determine what shaders
+    /// to use when dispatching operations.
     pub(crate) ty: TypeId,
     pub(crate) buf: Buffer,
+    /// Whether the buffer is mapped.
+    /// 
+    /// Mapped buffers are able to me read/modified (depending on how they were
+    /// mapped) by the host device. They must be unmapped before they can be
+    /// used by the GPU.
     pub(crate) is_mapped: bool,
+    /// `E` is needed at compile time for operator overloading, but is not
+    /// needed by data in this struct. PhantomData is used to make the compiler
+    /// happy.
     pty: PhantomData<E>,
 }
 static_assertions::assert_impl_all!(WgpuVec<u8>: Send, Sync);
@@ -122,34 +133,13 @@ impl<E: 'static> WgpuVec<E> {
         self.buf.slice(..).get_mapped_range_mut()
     }
 
-    /*
-    /// Panics if the buffer isn't mapped
-    pub(crate) fn as_slice<'s>(&'s self) -> &'s [E] {
-        let slice: wgpu::BufferSlice<'s> = self.buf.slice(..);
-        let view: wgpu::BufferView<'s> = slice.get_mapped_range();
-
-        // # Safety
-        // 1. This is effectively a transmute. Layouts are guaranteed to be the
-        //    same because of the guarantees provided by the constructor.
-        //    However, just to be doubly safe, we check the type id of both E
-        //    and the type of the buffer during development
-        // 2. The slice is actually constructed by copying a *mut pointer into a
-        //    slice. This means mutations to the result of this function will
-        //    affect this buffer. This is fine because the returned slice is
-        //    immutable, so invalid mutations will get caught by the compiler.
-        debug_assert_eq!(TypeId::of::<E>(), self.ty, "WgpuBuffer::as_slice(): type mismatch between buffer's contents and expected type");
-        unsafe {
-            // let (prefix, data, suffix) = view.align_to::<E>();
-            // assert_eq!(prefix.len(), 0);
-            // assert_eq!(suffix.len(), 0);
-            // return data
-            let aligned = view.align_to::<E>();
-            let data: &'s [E] = aligned.1;
-            return data;
-        }
-        // std::slice::from_raw_parts(slice.get_mapped_range().as_ptr() as *const E, self.len())
+    pub(crate) fn as_entire_binding(&self) -> wgpu::BindingResource {
+        self.buf.as_entire_binding()
     }
-    */
+
+    pub(crate) fn as_entire_buffer_binding(&self) -> wgpu::BufferBinding {
+        self.buf.as_entire_buffer_binding()
+    }
 }
 
 impl<'a, E> Into<&'a wgpu::Buffer> for &'a WgpuVec<E> {
