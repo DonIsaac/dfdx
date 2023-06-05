@@ -184,9 +184,3 @@ impl<E: 'static> Clone for WgpuVec<E> {
         return Self::from_buffer(self.dev.clone(), new_buffer);
     }
 }
-
-// impl<E: 'static + Copy> WgpuVec<E> {
-//     pub fn copy_from_slice(&mut slice, vec: Vec<E>) {
-
-//     }
-// }

@@ -9,6 +9,13 @@ use wgpu::{self, Buffer, BufferDescriptor, BufferUsages, Device, Instance, Queue
 use super::WgpuVec;
 use crate::tensor::cpu::{Cpu, CpuError};
 
+/// A GPU-accelerated device powered by [wgpu](https://docs.rs/wgpu/0.16.1/wgpu/index.html).
+/// Depending on compilation targets, this device uses WebGPU (for targeting
+/// WASM), Accelerate for MacOS, or Vulkan.
+///
+/// Data for tensors created by this device is not stored on the heap unless it
+/// is mapped; instead, data only ever lives on VRAM. This differs from the Cuda
+/// device, and has implications for read/write safety, `Cow` usage, and buffer caching.
 #[derive(Debug, Clone)]
 pub struct Wgpu {
     pub(crate) cpu: Cpu,
@@ -87,7 +94,6 @@ impl Synchronize for Wgpu {
     fn try_synchronize(&self) -> Result<(), WgpuError> {
         self.instance.poll_all(true);
         Ok(())
-        // self.dev.synchronize().map_err(CudaError::from)
     }
 }
 
@@ -116,10 +122,10 @@ impl<E: Unit> Storage<E> for Wgpu {
                 assert_eq!(suffix.len(), 0);
                 slice
             };
-            return slice.to_vec()
+            return slice.to_vec();
 
-            // buffer is copyable on the gpu, so we copy it into a mappable
-            // buffer and move it over
+        // buffer is copyable on the gpu, so we copy it into a mappable
+        // buffer and move it over
         } else if usages.contains(BufferUsages::COPY_SRC) {
             let new_buffer = self.dev.create_buffer(&BufferDescriptor {
                 label: None,
@@ -137,13 +143,11 @@ impl<E: Unit> Storage<E> for Wgpu {
                 .poll(wgpu::Maintain::WaitForSubmissionIndex(copy_id));
 
             let view = new_buffer.slice(..).get_mapped_range();
-            // let mut v: Vec<E> = Vec::with_capacity(new_buffer.size() as usize);
             let slice: &[E] = unsafe {
                 let (prefix, slice, suffix) = view.align_to::<E>();
                 assert_eq!(prefix.len(), 0);
                 assert_eq!(suffix.len(), 0);
                 slice
-                // v.copy_from_slice(slice);
             };
             return slice.to_vec();
         } else {
