@@ -2,15 +2,12 @@ extern crate alloc;
 use crate::shapes::{Shape, Unit};
 use crate::tensor::storage_traits::*;
 use alloc::sync::Arc;
-use core::{
-    any::TypeId,
-    fmt
-};
-use wgpu::{self, Buffer, BufferDescriptor, BufferUsages, Device, Instance, Queue};
+use core::{any::TypeId, fmt};
 use futures::executor::block_on;
+use wgpu::{self, Buffer, BufferDescriptor, BufferUsages, Device, Instance, Queue};
 
-use crate::tensor::cpu::{Cpu, CpuError};
 use super::WgpuVec;
+use crate::tensor::cpu::{Cpu, CpuError};
 
 #[derive(Debug, Clone)]
 pub struct Wgpu {
@@ -39,7 +36,7 @@ impl fmt::Display for WgpuError {
             Self::OutOfMemory => write!(f, "device is out of memory"),
             Self::WrongNumElements => write!(f, "wrong number of elements"),
             Self::CannotCreate(why) => write!(f, "Cannot create Wgpu device: {}", why),
-            Self::InvalidBufferUsage(why) => write!(f, "Invalid buffer usage: {}", why)
+            Self::InvalidBufferUsage(why) => write!(f, "Invalid buffer usage: {}", why),
         }
     }
 }
@@ -50,7 +47,7 @@ impl From<CpuError> for WgpuError {
     fn from(value: CpuError) -> Self {
         match value {
             CpuError::OutOfMemory => Self::OutOfMemory,
-            CpuError::WrongNumElements => Self::WrongNumElements
+            CpuError::WrongNumElements => Self::WrongNumElements,
         }
     }
 }
@@ -81,7 +78,7 @@ impl Default for Wgpu {
             instance,
             dev: Arc::new(dev),
             queue: Arc::new(queue),
-            cpu: Default::default()
+            cpu: Default::default(),
         }
     }
 }
@@ -107,54 +104,50 @@ impl<E: Unit> Storage<E> for Wgpu {
         let buffer = &v.buffer;
         let usages = buffer.usage();
 
-        match usages {
-            // This buffer is mappable and doesn't need to be copied into a
-            // mappable buffer. Usually only happens when
-            // MAPPABLE_PRIMARY_BUFFERS is enabled.
-            BufferUsages::MAP_READ => {
-                // Panics if buffer isn't immediately mappable
-                let view = buffer.slice(..).get_mapped_range();
-                let mut v: Vec<E> = Vec::with_capacity(buffer.size() as usize);
-                unsafe {
-                    let (prefix, slice, suffix) = view.align_to::<E>();
-                    assert_eq!(prefix.len(), 0);
-                    assert_eq!(suffix.len(), 0);
-                    v.copy_from_slice(slice);
-                }
-                return v;
-            }
+        // This buffer is mappable and doesn't need to be copied into a
+        // mappable buffer. Usually only happens when
+        // MAPPABLE_PRIMARY_BUFFERS is enabled.
+        if usages.contains(BufferUsages::MAP_READ) {
+            // Panics if buffer isn't immediately mappable
+            let view = buffer.slice(..).get_mapped_range();
+            let slice: &[E] = unsafe {
+                let (prefix, slice, suffix) = view.align_to::<E>();
+                assert_eq!(prefix.len(), 0);
+                assert_eq!(suffix.len(), 0);
+                slice
+            };
+            return slice.to_vec()
 
             // buffer is copyable on the gpu, so we copy it into a mappable
             // buffer and move it over
-            BufferUsages::COPY_SRC => {
-                let new_buffer = self.dev.create_buffer(&BufferDescriptor {
-                    label: None,
-                    usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-                    size: buffer.size(),
-                    mapped_at_creation: false,
-                });
-                let copy_id = self.submit(|encoder| {
-                    encoder.copy_buffer_to_buffer(buffer, 0, &new_buffer, 0, buffer.size())
-                });
-                new_buffer
-                    .slice(..)
-                    .map_async(wgpu::MapMode::Read, |res| res.unwrap());
-                self.dev
-                    .poll(wgpu::Maintain::WaitForSubmissionIndex(copy_id));
+        } else if usages.contains(BufferUsages::COPY_SRC) {
+            let new_buffer = self.dev.create_buffer(&BufferDescriptor {
+                label: None,
+                usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+                size: buffer.size(),
+                mapped_at_creation: false,
+            });
+            let copy_id = self.submit(|encoder| {
+                encoder.copy_buffer_to_buffer(buffer, 0, &new_buffer, 0, buffer.size())
+            });
+            new_buffer
+                .slice(..)
+                .map_async(wgpu::MapMode::Read, |res| res.unwrap());
+            self.dev
+                .poll(wgpu::Maintain::WaitForSubmissionIndex(copy_id));
 
-                let view = new_buffer.slice(..).get_mapped_range();
-                let mut v: Vec<E> = Vec::with_capacity(new_buffer.size() as usize);
-                unsafe {
-                    let (prefix, slice, suffix) = view.align_to::<E>();
-                    assert_eq!(prefix.len(), 0);
-                    assert_eq!(suffix.len(), 0);
-                    v.copy_from_slice(slice);
-                }
-                return v;
-            }
-            _ => {
-                panic!("cannot map wgpu buffer with usages: {:?}", usages);
-            }
+            let view = new_buffer.slice(..).get_mapped_range();
+            // let mut v: Vec<E> = Vec::with_capacity(new_buffer.size() as usize);
+            let slice: &[E] = unsafe {
+                let (prefix, slice, suffix) = view.align_to::<E>();
+                assert_eq!(prefix.len(), 0);
+                assert_eq!(suffix.len(), 0);
+                slice
+                // v.copy_from_slice(slice);
+            };
+            return slice.to_vec();
+        } else {
+            panic!("cannot map wgpu buffer with usages: {:?}", usages);
         }
     }
 
