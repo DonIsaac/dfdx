@@ -21,6 +21,8 @@ pub trait Unit:
     + SafeZeros
 {
     const ONE: Self;
+    /// String representation of the unit type.
+    const NAME: &'static str;
 }
 
 macro_rules! unit {
@@ -28,6 +30,7 @@ macro_rules! unit {
         impl SafeZeros for $type {}
         impl Unit for $type {
             const ONE: Self = $one;
+            const NAME: &'static str = stringify!($type);
         }
     };
 }
