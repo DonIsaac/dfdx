@@ -1,13 +1,18 @@
 extern crate alloc;
-use crate::shapes::{Shape, Unit};
-use crate::tensor::storage_traits::*;
+use crate::{
+    shapes::{Shape, Unit},
+    tensor::{
+        cpu::{Cpu, CpuError},
+        storage_traits::*,
+    },
+};
 use alloc::sync::Arc;
 use core::{any::TypeId, fmt};
 use futures::executor::block_on;
 use wgpu::{self, Buffer, BufferDescriptor, BufferUsages, Device, Instance, Queue};
 
-use super::WgpuVec;
-use crate::tensor::cpu::{Cpu, CpuError};
+use super::{resources::ResourceManager, WgpuVec};
+// use crate::tensor::;
 
 /// A GPU-accelerated device powered by [wgpu](https://docs.rs/wgpu/0.16.1/wgpu/index.html).
 /// Depending on compilation targets, this device uses WebGPU (for targeting
@@ -22,6 +27,7 @@ pub struct Wgpu {
     instance: Arc<Instance>, // needed for poll_all
     pub(crate) dev: Arc<Device>,
     pub(crate) queue: Arc<Queue>,
+    pub(crate) resources: Arc<ResourceManager>,
 }
 static_assertions::assert_impl_all!(Wgpu: Send, Sync);
 
@@ -81,11 +87,14 @@ impl Default for Wgpu {
         let instance = Arc::new(Instance::new(Default::default()));
         let adapter = block_on(instance.request_adapter(&Default::default())).unwrap();
         let (dev, queue) = block_on(adapter.request_device(&Default::default(), None)).unwrap();
+        let resources = ResourceManager::new(&dev);
+
         Self {
             instance,
             dev: Arc::new(dev),
             queue: Arc::new(queue),
             cpu: Default::default(),
+            resources: Arc::new(resources)
         }
     }
 }
