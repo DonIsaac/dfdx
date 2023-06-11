@@ -9,6 +9,7 @@ use crate::{
 use alloc::sync::Arc;
 use core::{any::TypeId, fmt};
 use futures::executor::block_on;
+use std::sync::RwLock;
 use wgpu::{self, Buffer, BufferDescriptor, BufferUsages, Device, Instance, Queue};
 
 use super::{resources::ResourceManager, WgpuVec};
@@ -27,7 +28,7 @@ pub struct Wgpu {
     instance: Arc<Instance>, // needed for poll_all
     pub(crate) dev: Arc<Device>,
     pub(crate) queue: Arc<Queue>,
-    pub(crate) resources: Arc<ResourceManager>,
+    pub(crate) resources: Arc<RwLock<ResourceManager>>,
 }
 static_assertions::assert_impl_all!(Wgpu: Send, Sync);
 
@@ -41,6 +42,8 @@ pub enum WgpuError {
     CannotCreate(String),
     /// Tried to use a buffer for something that its usages won't support
     InvalidBufferUsage(String),
+    /// Generic exception, contains a reason
+    InvalidState(&'static str),
 }
 
 impl fmt::Display for WgpuError {
@@ -50,6 +53,7 @@ impl fmt::Display for WgpuError {
             Self::WrongNumElements => write!(f, "wrong number of elements"),
             Self::CannotCreate(why) => write!(f, "Cannot create Wgpu device: {}", why),
             Self::InvalidBufferUsage(why) => write!(f, "Invalid buffer usage: {}", why),
+            Self::InvalidState(why) => write!(f, "{}", why),
         }
     }
 }
@@ -94,7 +98,7 @@ impl Default for Wgpu {
             dev: Arc::new(dev),
             queue: Arc::new(queue),
             cpu: Default::default(),
-            resources: Arc::new(resources)
+            resources: Arc::new(RwLock::new(resources)),
         }
     }
 }

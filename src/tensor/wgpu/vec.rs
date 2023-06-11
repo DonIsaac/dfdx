@@ -38,7 +38,7 @@ impl<E: 'static> WgpuVec<E> {
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
                 contents,
-                usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
             });
         Self::from_buffer(dev, buffer)
     }
@@ -75,6 +75,11 @@ impl<E: 'static> WgpuVec<E> {
     #[inline]
     pub fn size(&self) -> usize {
         self.buffer.size() as usize
+    }
+    
+    #[inline(always)]
+    pub fn as_entire_binding(&self) -> wgpu::BindingResource {
+        self.buffer.as_entire_binding()
     }
 }
 

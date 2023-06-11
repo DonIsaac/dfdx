@@ -5,6 +5,7 @@ mod resources;
 
 pub use vec::WgpuVec;
 pub use device::{Wgpu, WgpuError};
+pub(crate) use resources::LayoutType;
 
 #[cfg(test)]
 mod tests{
