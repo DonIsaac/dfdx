@@ -88,9 +88,20 @@ impl Wgpu {
 }
 impl Default for Wgpu {
     fn default() -> Self {
+        #[cfg(not(feature = "f16"))]
+        let features: wgpu::Features = Default::default();
+        #[cfg(feature = "f16")]
+        let features: wgpu::Features = wgpu::Features::default() | wgpu::Features::SHADER_F16;
+        
+        let limits: wgpu::Limits = Default::default();
+        let device_desc = wgpu::DeviceDescriptor {
+            label: Some("dfdx"),
+            features,
+            limits
+        };
         let instance = Arc::new(Instance::new(Default::default()));
         let adapter = block_on(instance.request_adapter(&Default::default())).unwrap();
-        let (dev, queue) = block_on(adapter.request_device(&Default::default(), None)).unwrap();
+        let (dev, queue) = block_on(adapter.request_device(&device_desc, None)).unwrap();
         let resources = ResourceManager::new(&dev);
 
         Self {

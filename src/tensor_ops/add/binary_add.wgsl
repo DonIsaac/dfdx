@@ -21,7 +21,7 @@ var<storage, read> kernel_meta: BinaryKernelMeta;
 var<storage, read_write> output: array<T>;
 
 @compute @workgroup_size(1, 1, 1)
-fn badd_fwd_f32(
+fn badd_fwd___TYPENAME__(
     @builtin(global_invocation_id) global_id: vec3<u32>
 ) {
     let i = global_id.x;

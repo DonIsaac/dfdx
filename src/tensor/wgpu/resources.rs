@@ -30,6 +30,9 @@ pub(crate) enum LayoutType {
     Dynamic,
 }
 
+#[cfg(all(feature = "f16", nightly))]
+const SHADER_F16_PREFIX: &str = "enable f16;\n";
+
 #[derive(Debug)]
 pub(crate) struct ResourceManager {
     binary_layout: BindGroupLayout,
@@ -96,6 +99,13 @@ impl ResourceManager {
         };
         // compile shader source and replace template types with E
         let module: ShaderModule = {
+            #[cfg(nightly)] {
+                #[cfg(not(feature = "f16"))]
+                let templated_source = shader_source.replace(Self::TYPENAME_TEMPLATE, E::NAME);
+                #[cfg(feature = "f16")]
+                let templated_source = SHADER_F16_PREFIX.to_owned() + shader_source.replace(Self::TYPENAME_TEMPLATE, E::NAME).as_str();
+            }
+            #[cfg(not(nightly))]
             let templated_source = shader_source.replace(Self::TYPENAME_TEMPLATE, E::NAME);
             let templated_source_str = templated_source.as_str();
             let source = ShaderSource::Wgsl(templated_source_str.into());

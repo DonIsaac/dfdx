@@ -5,6 +5,8 @@ pub trait SafeZeros {}
 
 #[cfg(feature = "cuda")]
 pub trait SafeZeros: cudarc::driver::ValidAsZeroBits + cudarc::driver::DeviceRepr {}
+#[cfg(feature = "f16")]
+use half::f16;
 
 /// Represents a unit type, but no arithmetic.
 pub trait Unit:
@@ -51,7 +53,7 @@ unit!(u128, 1);
 unit!(i128, 1);
 unit!(bool, true);
 #[cfg(feature = "f16")]
-unit!(half::f16, half::f16::ONE);
+unit!(f16, f16::ONE);
 
 /// Represents something that has a [Unit].
 pub trait HasUnitType {
