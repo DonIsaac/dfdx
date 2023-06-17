@@ -53,7 +53,7 @@ impl fmt::Display for WgpuError {
             Self::WrongNumElements => write!(f, "wrong number of elements"),
             Self::CannotCreate(why) => write!(f, "Cannot create Wgpu device: {}", why),
             Self::InvalidBufferUsage(why) => write!(f, "Invalid buffer usage: {}", why),
-            Self::InvalidState(why) => write!(f, "{}", why),
+            Self::InvalidState(why) => write!(f, "Invalid state: {}", why),
         }
     }
 }
@@ -74,6 +74,17 @@ impl HasErr for Wgpu {
 }
 
 impl Wgpu {
+    /// Submit a set of commands to the GPU for execution.
+    /// 
+    /// ## Example
+    /// ```
+    /// let dev: Wgpu = Default::default();
+    /// let buf: WgpuVec<f32> = dev.try_alloc_len(64).unwrap();
+    /// let data: Vec<f32> = vec![5.; 64];
+    /// dev.submit(|encoder| {
+    ///     // todo
+    /// });
+    /// ```
     pub(crate) fn submit<F>(&self, command_builder: F) -> wgpu::SubmissionIndex
     where
         F: FnOnce(&mut wgpu::CommandEncoder),
@@ -92,7 +103,7 @@ impl Default for Wgpu {
         let features: wgpu::Features = Default::default();
         #[cfg(feature = "f16")]
         let features: wgpu::Features = wgpu::Features::default() | wgpu::Features::SHADER_F16;
-        
+
         let limits: wgpu::Limits = Default::default();
         let device_desc = wgpu::DeviceDescriptor {
             label: Some("dfdx"),

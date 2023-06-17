@@ -1,6 +1,8 @@
 mod cpu_kernel;
 #[cfg(feature = "cuda")]
 mod cuda_kernel;
+#[cfg(feature = "wgpu")]
+mod wgpu_kernel;
 
 use crate::prelude::{Shape, Storage, Tensor, Unit};
 
@@ -73,7 +75,7 @@ mod tests {
 
     #[test]
     fn test_to_dtype_signed() {
-        let dev: TestDevice = Default::default();
+        let dev: Wgpu = Default::default();
         let a = dev.tensor_from_vec(
             (0..128).map(|x| x as f32).collect(),
             Rank1::<128>::default(),

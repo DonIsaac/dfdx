@@ -59,16 +59,16 @@ impl ResourceManager {
     /// Returns None if the pipeline hasn't been registered yet.
     pub(crate) fn get_pipeline<E: Unit>(
         &self,
-        shader_name: &'static str,
-        entrypoint_name: &'static str,
+        shader_name: &str,
+        entrypoint_name: &str,
     ) -> Option<Arc<ComputePipeline>> {
         let key = self.to_key::<E, DefaultHasher>(shader_name, entrypoint_name);
         self.pipelines.get(&key).map(|o| o.clone())
     }
     pub(crate) fn has_pipeline<E: Unit>(
         &self,
-        shader_name: &'static str,
-        entrypoint_name: &'static str,
+        shader_name: &str,
+        entrypoint_name: &str,
     ) -> bool {
         let key = self.to_key::<E, DefaultHasher>(shader_name, entrypoint_name);
         self.pipelines.contains_key(&key)
@@ -77,9 +77,9 @@ impl ResourceManager {
     pub(crate) fn register_pipeline<E: Unit>(
         &mut self,
         device: &wgpu::Device,
-        shader_name: &'static str,
-        entrypoint_name: &'static str,
-        shader_source: &'static str,
+        shader_name: &str,
+        entrypoint_name: &str,
+        shader_source: &str,
         layout_type: LayoutType,
     ) -> Arc<ComputePipeline> {
         // compose pipeline layout
@@ -131,8 +131,8 @@ impl ResourceManager {
 
     fn to_key<E: Unit, H: Hasher + Default>(
         &self,
-        shader_name: &'static str,
-        entrypoint_name: &'static str,
+        shader_name: &str,
+        entrypoint_name: &str,
     ) -> PipelineKey {
         let mut hasher: H = Default::default();
         hasher.write(shader_name.as_bytes());

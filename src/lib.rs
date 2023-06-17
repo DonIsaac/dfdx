@@ -243,11 +243,17 @@ pub fn keep_denormals() {
 pub(crate) mod tests {
     pub use num_traits::{Float, FromPrimitive, NumCast, Zero};
 
+    // #[cfg(not(any(feature = "cuda", feature = "wgpu")))]
+    // pub type TestDevice = crate::tensor::Cpu;
+
     #[cfg(not(feature = "cuda"))]
     pub type TestDevice = crate::tensor::Cpu;
 
     #[cfg(feature = "cuda")]
     pub type TestDevice = crate::tensor::Cuda;
+
+    // #[cfg(feature = "wgpu")]
+    // pub type TestDevice = crate::tensor::Wgpu;
 
     #[cfg(all(feature = "test-f64", feature = "test-f16"))]
     compile_error!("f64 and f16 cannot be tested at the same time");

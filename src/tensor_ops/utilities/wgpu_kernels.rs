@@ -28,7 +28,16 @@ where
 macro_rules! params {
     ($self:expr, $pipeline:expr; $($x:expr),+ $(,)? ) => {
         {
-            let entries = to_entries([$($x.as_entire_binding()),+]);
+            let bindings = [$($x.as_entire_binding()),+];
+            // let entries = to_entries([$($x.as_entire_binding()),+]);
+            let entries: Vec<_> = bindings
+                .into_iter()
+                .enumerate()
+                .map(|(i, binding)| wgpu::BindGroupEntry {
+                    binding: i as u32,
+                    resource: binding,
+                })
+                .collect();
             $self.dev.create_bind_group(&::wgpu::BindGroupDescriptor {
                 label: None,
                 layout: &($pipeline).get_bind_group_layout(0),
@@ -37,6 +46,7 @@ macro_rules! params {
         }
     }
 }
+pub(crate) use params;
 
 pub trait BinaryOpWgpuKernel<E: Unit> {
     const HAS_CONST_DF: bool;
@@ -64,20 +74,20 @@ pub trait BinaryOpWgpuKernel<E: Unit> {
 }
 
 macro_rules! wgpu_binary {
-    ($Op:path, $TypeName:ty, $Ptx:tt, $Fwd:tt, $Bwd_Lhs:tt, $Bwd_Rhs:tt) => {
+    ($Op:path, $TypeName:ty, $Wgsl:tt, $Fwd:tt, $Bwd_Lhs:tt, $Bwd_Rhs:tt) => {
         impl crate::tensor_ops::wgpu_kernels::BinaryOpWgpuKernel<$TypeName> for $Op {
             const HAS_CONST_DF: bool = false;
-            const WGSL_SRC: &'static str = $Ptx;
+            const WGSL_SRC: &'static str = $Wgsl;
             const MODULE_NAME: &'static str = $Fwd;
             const FWD_FN_NAME: &'static str = $Fwd;
             const BWD_LHS_FN_NAME: &'static str = $Bwd_Lhs;
             const BWD_RHS_FN_NAME: &'static str = $Bwd_Rhs;
         }
     };
-    (const_df() $Op:path, $TypeName:ty, $Ptx:tt, $Fwd:tt, $Bwd_Lhs:tt, $Bwd_Rhs:tt) => {
+    (const_df() $Op:path, $TypeName:ty, $Wgsl:tt, $Fwd:tt, $Bwd_Lhs:tt, $Bwd_Rhs:tt) => {
         impl crate::tensor_ops::wgpu_kernels::BinaryOpWgpuKernel<$TypeName> for $Op {
             const HAS_CONST_DF: bool = true;
-            const WGSL_SRC: &'static str = $Ptx;
+            const WGSL_SRC: &'static str = $Wgsl;
             const MODULE_NAME: &'static str = $Fwd;
             const FWD_FN_NAME: &'static str = $Fwd;
             const BWD_LHS_FN_NAME: &'static str = $Bwd_Lhs;

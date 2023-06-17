@@ -2,7 +2,7 @@ use super::device::{Wgpu, WgpuError};
 use super::vec::WgpuVec;
 use crate::{
     shapes::*,
-    tensor::{masks::triangle_mask, storage_traits::*, unique_id, Cpu, Tensor},
+    tensor::{masks::triangle_mask, storage_traits::*, unique_id, Cpu, NoneTape, Tensor},
 };
 use rand::Rng;
 use std::sync::Arc;
@@ -24,15 +24,6 @@ impl Wgpu {
         }
     }
 
-    pub(crate) fn tensor_from_vec<S: Shape, E: Unit>(
-        &self,
-        shape: S,
-        vec: &Vec<E>,
-    ) -> Tensor<S, E, Self> {
-        let data: WgpuVec<E> = WgpuVec::from_vec(Arc::new(self.clone()), vec);
-        let strides = shape.strides();
-        self.build_tensor(shape, strides, data)
-    }
 }
 
 impl<E: Unit> ZerosTensor<E> for Wgpu {
@@ -110,7 +101,7 @@ impl<E: Unit> TriangleTensor<E> for Wgpu {
         let mut data = std::vec![val; shape.num_elements()];
         let offset = diagonal.into().unwrap_or(0);
         triangle_mask(&mut data, &shape, true, offset);
-        Ok(self.tensor_from_vec(shape, &data))
+        Ok(self.tensor_from_vec( data, shape))
     }
 
     fn try_lower_tri_like<S: HasShape>(
@@ -123,7 +114,7 @@ impl<E: Unit> TriangleTensor<E> for Wgpu {
         let mut data = std::vec![val; shape.num_elements()];
         let offset = diagonal.into().unwrap_or(0);
         triangle_mask(&mut data, &shape, false, offset);
-        Ok(self.tensor_from_vec(shape, &data))
+        Ok(self.tensor_from_vec(data, shape))
     }
 }
 
@@ -145,7 +136,7 @@ where
             let mut rng = self.cpu.rng.lock();
             buf.resize_with(shape.num_elements(), || rng.sample(&distr));
         }
-        Ok(self.tensor_from_vec(shape, &buf))
+        Ok(self.tensor_from_vec(buf, shape))
     }
 
     fn try_fill_with_distr<D: rand_distr::Distribution<E>>(
@@ -185,19 +176,33 @@ where
 }
 
 impl<E: Unit> TensorFromVec<E> for Wgpu {
+    fn tensor_from_vec<S: Shape>(
+        &self,
+        vec: Vec<E>,
+        shape: S,
+    ) -> Tensor<S, E, Self> {
+        let data: WgpuVec<E> = WgpuVec::from_vec(Arc::new(self.clone()), &vec);
+        let strides = shape.strides();
+        self.build_tensor(shape, strides, data)
+    }
     fn try_tensor_from_vec<S: Shape>(
         &self,
         src: Vec<E>,
         shape: S,
     ) -> Result<Tensor<S, E, Self>, Self::Err> {
-        Ok(self.tensor_from_vec(shape, &src))
+        Ok(self.tensor_from_vec(src, shape))
     }
 }
 
-// impl<S: Shape, E: Unit> TensorToArray<S, E> for Wgpu {
-//     type Array;
+impl<S: Shape, E: Unit> TensorToArray<S, E> for Wgpu
+where
+    Cpu: TensorToArray<S, E> + Storage<E>,
+{
+    type Array = <Cpu as TensorToArray<S, E>>::Array;
 
-//     fn tensor_to_array<T>(&self, tensor: &Tensor<S, E, Self, T>) -> Self::Array {
-//         todo!()
-//     }
-// }
+    fn tensor_to_array<T>(&self, tensor: &Tensor<S, E, Self, T>) -> Self::Array {
+        let buf = tensor.as_vec();
+        let cpu_tensor = self.cpu.tensor_from_vec(buf, tensor.shape);
+        self.cpu.tensor_to_array::<NoneTape>(&cpu_tensor)
+    }
+}
