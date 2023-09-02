@@ -1,5 +1,8 @@
 use crate::shapes::Unit;
-use core::hash::{BuildHasher, Hasher};
+use core::{
+    any::TypeId,
+    hash::{BuildHasher, Hash, Hasher},
+};
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap},
     sync::Arc,
@@ -18,6 +21,8 @@ use wgpu::{
     // kernels
     ShaderSource,
 };
+
+use super::{WgpuNativeType, WgpuPackedType};
 
 // pub(crate) type PipelineKey = &'static str;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -65,11 +70,7 @@ impl ResourceManager {
         let key = self.to_key::<E, DefaultHasher>(shader_name, entrypoint_name);
         self.pipelines.get(&key).map(|o| o.clone())
     }
-    pub(crate) fn has_pipeline<E: Unit>(
-        &self,
-        shader_name: &str,
-        entrypoint_name: &str,
-    ) -> bool {
+    pub(crate) fn has_pipeline<E: Unit>(&self, shader_name: &str, entrypoint_name: &str) -> bool {
         let key = self.to_key::<E, DefaultHasher>(shader_name, entrypoint_name);
         self.pipelines.contains_key(&key)
     }
@@ -99,11 +100,15 @@ impl ResourceManager {
         };
         // compile shader source and replace template types with E
         let module: ShaderModule = {
-            #[cfg(nightly)] {
+            #[cfg(nightly)]
+            {
                 #[cfg(not(feature = "f16"))]
                 let templated_source = shader_source.replace(Self::TYPENAME_TEMPLATE, E::NAME);
                 #[cfg(feature = "f16")]
-                let templated_source = SHADER_F16_PREFIX.to_owned() + shader_source.replace(Self::TYPENAME_TEMPLATE, E::NAME).as_str();
+                let templated_source = SHADER_F16_PREFIX.to_owned()
+                    + shader_source
+                        .replace(Self::TYPENAME_TEMPLATE, E::NAME)
+                        .as_str();
             }
             #[cfg(not(nightly))]
             let templated_source = shader_source.replace(Self::TYPENAME_TEMPLATE, E::NAME);
@@ -137,7 +142,8 @@ impl ResourceManager {
         let mut hasher: H = Default::default();
         hasher.write(shader_name.as_bytes());
         hasher.write(entrypoint_name.as_bytes());
-        hasher.write(E::NAME.as_bytes());
+        let type_id = TypeId::of::<E>();
+        type_id.hash(&mut hasher);
         let key = hasher.finish();
         return PipelineKey(key);
     }

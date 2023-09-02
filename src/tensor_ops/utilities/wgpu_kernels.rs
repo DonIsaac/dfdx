@@ -48,6 +48,103 @@ macro_rules! params {
 }
 pub(crate) use params;
 
+pub trait UnaryOpWgpuKernel<E> {
+    const DF_USES_FX: bool;
+    const HAS_CONST_DF: bool;
+
+    /// WGSL source code for the kernel
+    const WGSL_SRC: &'static str;
+
+    // todo: support mut/self-reassign kernels
+    // const WGSL_SRC_MUT: Option<&'static str>;
+
+    /// Unique name for the kernel
+    const MODULE_NAME: &'static str;
+
+    /// Name of function in the .wgsl file (used as entrypoint)
+    const FWD_FN_NAME: &'static str;
+
+    /// Name of function in the .wgsl file (used as entrypoint)
+    const BWD_FN_NAME: &'static str;
+
+    const ALL_FN_NAMES: [&'static str; 2] = [Self::FWD_FN_NAME, Self::BWD_FN_NAME];
+}
+
+macro_rules! wgpu_unary {
+    ($Op:path, $TypeName:ty, $Wgsl:tt, $Fwd:tt, $Bwd:tt) => {
+        impl crate::tensor_ops::wgpu_kernels::UnaryOpWgpuKernel<$TypeName> for $Op {
+            const DF_USES_FX: bool = false;
+            const HAS_CONST_DF: bool = false;
+            const WGSL_SRC: &'static str = $Wgsl;
+            const MODULE_NAME: &'static str = $Fwd;
+            const FWD_FN_NAME: &'static str = $Fwd;
+            const BWD_FN_NAME: &'static str = $Bwd;
+        }
+    };
+    (df(f(x)) $Op:path, $TypeName:ty, $Wgsl:tt, $Fwd:tt, $Bwd:tt) => {
+        impl crate::tensor_ops::wgpu_kernels::UnaryOpWgpuKernel<$TypeName> for $Op {
+            const DF_USES_FX: bool = true;
+            const HAS_CONST_DF: bool = false;
+            const WGSL_SRC: &'static str = $Wgsl;
+            const MODULE_NAME: &'static str = $Fwd;
+            const FWD_FN_NAME: &'static str = $Fwd;
+            const BWD_FN_NAME: &'static str = $Bwd;
+        }
+    };
+    (const_df() $Op:path, $TypeName:ty, $Wgsl:tt, $Fwd:tt, $Bwd:tt) => {
+        impl crate::tensor_ops::wgpu_kernels::UnaryOpWgpuKernel<$TypeName> for $Op {
+            const DF_USES_FX: bool = false;
+            const HAS_CONST_DF: bool = true;
+            const WGSL_SRC: &'static str = $Wgsl;
+            const MODULE_NAME: &'static str = $Fwd;
+            const FWD_FN_NAME: &'static str = $Fwd;
+            const BWD_FN_NAME: &'static str = $Bwd;
+        }
+    };
+}
+
+pub(crate) use wgpu_unary;
+
+impl<E: Dtype, K: UnaryOpWgpuKernel<E>> UnaryKernel<K, E> for Wgpu {
+    const BACKWARD_WITHOUT_INP: bool = K::DF_USES_FX;
+    const BACKWARD_WITHOUT_DATA: bool = K::HAS_CONST_DF;
+
+    fn forward<S: Shape>(
+        &self,
+        op: K,
+        inp: Cow<Tensor<S, E, Self>>,
+    ) -> Result<Tensor<S, E, Self>, Self::Err> {
+        let numel = inp.data.len();
+        match inp {
+            Cow::Borrowed(inp) => {
+                let pipeline = self.get_or_register_pipeline::<E>(
+                    K::MODULE_NAME,
+                    K::FWD_FN_NAME,
+                    K::WGSL_SRC,
+                    LayoutType::Unary
+                )?;
+                let output: WgpuVec<E> = self.try_alloc_len(numel)?;
+
+            }
+            Cow::Owned(mut inp) => {
+                todo!()
+            }
+        }
+        todo!()
+    }
+
+    fn backward<S: Shape>(
+        &self,
+        op: K,
+        inp: &impl Tensorlike<S, E, Self>,
+        grad_inp: &mut Self::Vec,
+        out: &impl Tensorlike<S, E, Self>,
+        grad_out: &Self::Vec,
+    ) -> Result<(), Self::Err> {
+        todo!()
+    }
+}
+
 pub trait BinaryOpWgpuKernel<E: Unit> {
     const HAS_CONST_DF: bool;
 
@@ -379,27 +476,12 @@ impl<E: Dtype, K: BinaryOpWgpuKernel<E> + Clone> BinaryKernel<K, E> for Wgpu {
         lhs: Cow<Tensor<S, E, Self>>,
         rhs: Cow<Tensor<S, E, Self>>,
     ) -> Result<Tensor<S, E, Self>, Self::Err> {
-        let pipeline = {
-            let resources = self.resources.read().map_err(|_| {
-                WgpuError::InvalidState("could not lock device because lock was poisoned")
-            })?;
-            match resources.get_pipeline::<E>(K::MODULE_NAME, K::FWD_FN_NAME) {
-                Some(pipeline) => pipeline,
-                None => {
-                    drop(resources);
-                    let mut resources = self.resources.write().map_err(|_| {
-                        WgpuError::InvalidState("could not lock device because lock was poisoned")
-                    })?;
-                    resources.register_pipeline::<E>(
-                        &self.dev.as_ref(),
-                        K::MODULE_NAME,
-                        K::FWD_FN_NAME,
-                        K::WGSL_SRC,
-                        LayoutType::Binary,
-                    )
-                }
-            }
-        };
+        let pipeline = self.get_or_register_pipeline::<E>(
+            K::MODULE_NAME,
+            K::FWD_FN_NAME,
+            K::WGSL_SRC,
+            LayoutType::Binary
+        )?;
 
         let shape = lhs.shape;
         let strides = shape.strides();
@@ -487,7 +569,7 @@ impl<E: Dtype, K: BinaryOpWgpuKernel<E> + Clone> BinaryKernel<K, E> for Wgpu {
                         // self.queue.on_submitted_work_done(|| {
                         //     output.buffer.destroy();
                         // });
-                        return Ok(lhs)
+                        return Ok(lhs);
                     }
                 } else {
                     let output: WgpuVec<E> = self.try_alloc_len(meta.numel as usize)?;

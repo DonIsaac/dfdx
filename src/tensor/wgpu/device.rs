@@ -12,7 +12,7 @@ use futures::executor::block_on;
 use std::sync::RwLock;
 use wgpu::{self, Buffer, BufferDescriptor, BufferUsages, Device, Instance, Queue};
 
-use super::{resources::ResourceManager, WgpuVec};
+use super::{resources::ResourceManager, LayoutType, WgpuVec};
 // use crate::tensor::;
 
 /// A GPU-accelerated device powered by [wgpu](https://docs.rs/wgpu/0.16.1/wgpu/index.html).
@@ -75,7 +75,7 @@ impl HasErr for Wgpu {
 
 impl Wgpu {
     /// Submit a set of commands to the GPU for execution.
-    /// 
+    ///
     /// ## Example
     /// ```
     /// let dev: Wgpu = Default::default();
@@ -96,7 +96,36 @@ impl Wgpu {
         let cmd = [encoder.finish()];
         self.queue.submit(cmd)
     }
+
+    pub(crate) fn get_or_register_pipeline<E: Unit>(
+        &self,
+        shader_name: &str,
+        entrypoint_name: &str,
+        shader_source: &str,
+        layout_type: LayoutType,
+    ) -> Result<Arc<wgpu::ComputePipeline>, WgpuError> {
+        let resources = self.resources.read().map_err(|_| {
+            WgpuError::InvalidState("could not lock device because lock was poisoned")
+        })?;
+        match resources.get_pipeline::<E>(shader_name, entrypoint_name) {
+            Some(pipeline) => Ok(pipeline),
+            None => {
+                drop(resources);
+                let mut resources = self.resources.write().map_err(|_| {
+                    WgpuError::InvalidState("could not lock device because lock was poisoned")
+                })?;
+                Ok(resources.register_pipeline::<E>(
+                    self.dev.as_ref(),
+                    shader_name,
+                    entrypoint_name,
+                    shader_source,
+                    layout_type,
+                ))
+            }
+        }
+    }
 }
+
 impl Default for Wgpu {
     fn default() -> Self {
         #[cfg(not(feature = "f16"))]
@@ -108,7 +137,7 @@ impl Default for Wgpu {
         let device_desc = wgpu::DeviceDescriptor {
             label: Some("dfdx"),
             features,
-            limits
+            limits,
         };
         let instance = Arc::new(Instance::new(Default::default()));
         let adapter = block_on(instance.request_adapter(&Default::default())).unwrap();

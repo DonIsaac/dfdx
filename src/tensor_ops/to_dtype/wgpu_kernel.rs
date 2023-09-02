@@ -15,7 +15,7 @@ use crate::{
         Storage,
         Tensor,
         wgpu::{Wgpu, WgpuError, WgpuVec, LayoutType}
-    }
+    }, prelude::wgpu::WgpuNativeType
 };
 
 const ENTRYPOINT_NAME: &str = "main";
@@ -61,7 +61,7 @@ const LAYOUT_DESC: wgpu::BindGroupLayoutDescriptor = wgpu::BindGroupLayoutDescri
     ],
 };
 
-impl<E1: Unit + AsPrimitive<E2>, E2: Unit> super::ToDtypeKernel<E1, E2> for Wgpu {
+impl<E1: WgpuNativeType + AsPrimitive<E2>, E2: WgpuNativeType> super::ToDtypeKernel<E1, E2> for Wgpu {
     fn forward<S: Shape>(inp: Tensor<S, E1, Self>) -> Result<Tensor<S, E2, Self>, Self::Err> {
         // static mut LAYOUT: RwLock<Option<wgpu::BindGroupLayout>> = RwLock::new(None);
         // todo: this doesn't fit in with the type template used by
@@ -124,5 +124,18 @@ impl<E1: Unit + AsPrimitive<E2>, E2: Unit> super::ToDtypeKernel<E1, E2> for Wgpu
             pass.dispatch_workgroups(numel as u32, 1, 1);
         });
         Ok(dev.build_tensor(shape, strides, output))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::prelude::*;
+    #[test]
+    fn test_i32_to_u32() {
+        let dev: Wgpu = Default::default();
+        let a = dev.tensor([[1, 2, 3], [4, 5, 6]]);
+        let b = a.to_dtype::<u32>();
+        let b = b.as_vec();
+        assert_eq!(b, vec![1, 2, 3, 4, 5, 6])
     }
 }

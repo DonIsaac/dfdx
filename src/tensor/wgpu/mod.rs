@@ -2,9 +2,11 @@ mod device;
 mod vec;
 mod allocate;
 mod resources;
+mod types;
 
 pub use vec::WgpuVec;
 pub use device::{Wgpu, WgpuError};
+pub use types::*;
 pub(crate) use resources::LayoutType;
 
 #[cfg(test)]
